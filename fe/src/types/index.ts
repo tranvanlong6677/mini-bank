@@ -67,3 +67,18 @@ export interface AuthContextType {
   logoutAll: () => Promise<void>;
   isAuthenticated: boolean;
 }
+
+// ==================== Post Types ====================
+
+export interface Post {
+  userId: number;
+  id: number;
+  title: string;
+  body: string;
+}
+
+export interface PostRequest {
+  userId: number;
+  title: string;
+  body: string;
+}

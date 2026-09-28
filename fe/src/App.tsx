@@ -6,6 +6,7 @@ import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import UserManagement from './pages/UserManagement';
+import Posts from './pages/Posts';
 
 function App() {
   return (
@@ -22,6 +23,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <UserManagement />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/posts"
+              element={
+                <ProtectedRoute>
+                  <Posts />
                 </ProtectedRoute>
               }
             />

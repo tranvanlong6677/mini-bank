@@ -7,12 +7,13 @@ import lombok.NoArgsConstructor;
 
 @Data
 @Builder
-@AllArgsConstructor
 @NoArgsConstructor
-public class UserResponse {
-
-    private Long id;
+@AllArgsConstructor
+public class AuthResponse {
+    private String accessToken;
+    private String refreshToken;
     private String username;
     private String fullName;
-
+    private String tokenType;
+    private Long expiresIn;  // Access token expiration in seconds
 }

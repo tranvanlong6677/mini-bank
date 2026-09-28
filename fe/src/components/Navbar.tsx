@@ -30,6 +30,9 @@ const Navbar = () => {
                 <Link to="/users" className="hover:bg-blue-700 px-3 py-2 rounded-md transition">
                   Quản lý Users
                 </Link>
+                <Link to="/posts" className="hover:bg-blue-700 px-3 py-2 rounded-md transition">
+                  Posts
+                </Link>
                 <span className="text-blue-200">|</span>
                 <span className="text-blue-100">Xin chào, {user?.fullName}</span>
                 <button
