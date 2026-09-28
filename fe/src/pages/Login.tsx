@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useState, FormEvent, ChangeEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { AxiosError } from 'axios';
+import type { ApiResponse } from '../types';
 
 const Login = () => {
   const [username, setUsername] = useState('');
@@ -10,7 +12,7 @@ const Login = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError('');
     setLoading(true);
@@ -19,7 +21,8 @@ const Login = () => {
       await login(username, password);
       navigate('/users');
     } catch (err) {
-      const errorMessage = err.response?.data?.message || 'Đăng nhập thất bại';
+      const axiosError = err as AxiosError<ApiResponse<null>>;
+      const errorMessage = axiosError.response?.data?.message || 'Đăng nhập thất bại';
       setError(errorMessage);
     } finally {
       setLoading(false);
@@ -49,7 +52,7 @@ const Login = () => {
               id="username"
               type="text"
               value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => setUsername(e.target.value)}
               required
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               placeholder="Nhập username"
@@ -64,7 +67,7 @@ const Login = () => {
               id="password"
               type="password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
               required
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               placeholder="Nhập password"

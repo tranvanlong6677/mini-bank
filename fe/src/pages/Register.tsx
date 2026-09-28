@@ -1,9 +1,18 @@
-import { useState } from 'react';
+import { useState, FormEvent, ChangeEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { AxiosError } from 'axios';
+import type { ApiResponse } from '../types';
+
+interface FormData {
+  username: string;
+  password: string;
+  confirmPassword: string;
+  fullName: string;
+}
 
 const Register = () => {
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<FormData>({
     username: '',
     password: '',
     confirmPassword: '',
@@ -14,12 +23,12 @@ const Register = () => {
   const { register } = useAuth();
   const navigate = useNavigate();
 
-  const handleChange = (e) => {
+  const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError('');
 
@@ -40,7 +49,8 @@ const Register = () => {
       await register(formData.username, formData.password, formData.fullName);
       navigate('/users');
     } catch (err) {
-      const errorMessage = err.response?.data?.message || 'Đăng ký thất bại';
+      const axiosError = err as AxiosError<ApiResponse<null>>;
+      const errorMessage = axiosError.response?.data?.message || 'Đăng ký thất bại';
       setError(errorMessage);
     } finally {
       setLoading(false);

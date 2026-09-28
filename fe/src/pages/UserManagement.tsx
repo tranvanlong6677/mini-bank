@@ -1,13 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, FormEvent, ChangeEvent } from 'react';
 import { userApi } from '../services/api';
+import { AxiosError } from 'axios';
+import type { UserResponse, UserRequest, ApiResponse } from '../types';
 
 const UserManagement = () => {
-  const [users, setUsers] = useState([]);
+  const [users, setUsers] = useState<UserResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
-  const [editingUser, setEditingUser] = useState(null);
-  const [formData, setFormData] = useState({ username: '', fullName: '' });
+  const [editingUser, setEditingUser] = useState<UserResponse | null>(null);
+  const [formData, setFormData] = useState<UserRequest>({ username: '', fullName: '' });
   const [submitting, setSubmitting] = useState(false);
 
   // Fetch users
@@ -18,7 +20,8 @@ const UserManagement = () => {
       setUsers(response.data.data || []);
       setError('');
     } catch (err) {
-      setError(err.response?.data?.message || 'Không thể tải danh sách users');
+      const axiosError = err as AxiosError<ApiResponse<null>>;
+      setError(axiosError.response?.data?.message || 'Không thể tải danh sách users');
     } finally {
       setLoading(false);
     }
@@ -29,7 +32,7 @@ const UserManagement = () => {
   }, []);
 
   // Open modal for create/edit
-  const openModal = (user = null) => {
+  const openModal = (user: UserResponse | null = null) => {
     if (user) {
       setEditingUser(user);
       setFormData({ username: user.username, fullName: user.fullName });
@@ -48,13 +51,13 @@ const UserManagement = () => {
   };
 
   // Handle form change
-  const handleChange = (e) => {
+  const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   // Handle form submit
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setSubmitting(true);
 
@@ -67,14 +70,15 @@ const UserManagement = () => {
       closeModal();
       fetchUsers();
     } catch (err) {
-      setError(err.response?.data?.message || 'Có lỗi xảy ra');
+      const axiosError = err as AxiosError<ApiResponse<null>>;
+      setError(axiosError.response?.data?.message || 'Có lỗi xảy ra');
     } finally {
       setSubmitting(false);
     }
   };
 
   // Handle delete
-  const handleDelete = async (id, username) => {
+  const handleDelete = async (id: number, username: string) => {
     if (!window.confirm(`Bạn có chắc muốn xóa user "${username}"?`)) {
       return;
     }
@@ -83,7 +87,8 @@ const UserManagement = () => {
       await userApi.delete(id);
       fetchUsers();
     } catch (err) {
-      setError(err.response?.data?.message || 'Không thể xóa user');
+      const axiosError = err as AxiosError<ApiResponse<null>>;
+      setError(axiosError.response?.data?.message || 'Không thể xóa user');
     }
   };
 
