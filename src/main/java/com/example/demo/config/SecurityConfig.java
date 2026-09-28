@@ -35,6 +35,7 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers("/api/external/**").permitAll()  // Cho phép test Feign Client
+                .requestMatchers("/ws/**").permitAll()  // WebSocket endpoint
                 .requestMatchers("/error").permitAll()
                 .anyRequest().authenticated()
             )

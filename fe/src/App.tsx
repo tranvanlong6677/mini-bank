@@ -7,6 +7,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import UserManagement from './pages/UserManagement';
 import Posts from './pages/Posts';
+import ChatPage from './pages/ChatPage';
 
 function App() {
   return (
@@ -31,6 +32,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <Posts />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/chat"
+              element={
+                <ProtectedRoute>
+                  <ChatPage />
                 </ProtectedRoute>
               }
             />

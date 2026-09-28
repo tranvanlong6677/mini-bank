@@ -179,4 +179,25 @@ export const postApi = {
     api.post<ApiResponse<Post>>('/external/posts', data),
 };
 
+// ==================== Chat APIs ====================
+import type { ChatMessage, Conversation } from '../types';
+
+export const chatApi = {
+  // Lấy lịch sử chat với 1 user
+  getHistory: (partnerId: number) => 
+    api.get<ApiResponse<ChatMessage[]>>(`/chat/history/${partnerId}`),
+  
+  // Lấy danh sách conversations (sidebar)
+  getConversations: () => 
+    api.get<ApiResponse<Conversation[]>>('/chat/conversations'),
+  
+  // Đánh dấu đã đọc
+  markAsRead: (senderId: number) => 
+    api.post<ApiResponse<void>>(`/chat/read/${senderId}`),
+  
+  // Đếm tin chưa đọc
+  countUnread: (senderId: number) => 
+    api.get<ApiResponse<number>>(`/chat/unread/${senderId}`),
+};
+
 export default api;

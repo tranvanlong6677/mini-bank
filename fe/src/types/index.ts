@@ -82,3 +82,28 @@ export interface PostRequest {
   title: string;
   body: string;
 }
+
+
+// ==================== Chat Types ====================
+
+export type MessageType = 'CHAT' | 'JOIN' | 'LEAVE' | 'TYPING' | 'READ';
+
+export interface ChatMessage {
+  id?: number;
+  senderId: number;
+  senderName?: string;
+  receiverId: number;
+  receiverName?: string;
+  content: string;
+  sentAt?: string;
+  isRead?: boolean;
+  type: MessageType;
+}
+
+export interface Conversation {
+  partnerId: number;
+  partnerName: string;
+  lastMessage: string;
+  lastMessageAt: string;
+  unreadCount: number;
+}

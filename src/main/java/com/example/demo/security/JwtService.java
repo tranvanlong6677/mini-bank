@@ -84,6 +84,18 @@ public class JwtService {
     }
 
     /**
+     * Validate token chỉ với username (cho WebSocket)
+     */
+    public boolean isTokenValidForWebSocket(String token) {
+        try {
+            String username = extractUsername(token);
+            return username != null && !isTokenExpired(token);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
      * Kiểm tra có phải refresh token không
      */
     public boolean isRefreshToken(String token) {
