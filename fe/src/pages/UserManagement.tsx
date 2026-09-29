@@ -1,37 +1,39 @@
-import { useState, useEffect, FormEvent, ChangeEvent } from 'react';
-import { userApi } from '../services/api';
-import { AxiosError } from 'axios';
-import type { UserResponse, UserRequest, ApiResponse } from '../types';
+import { useState, FormEvent, ChangeEvent } from 'react';
+import { useUsers, useCreateUser, useUpdateUser, useDeleteUser } from '../hooks/useUsers';
+import type { UserResponse, UserRequest } from '../types';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 
 const UserManagement = () => {
-  const [users, setUsers] = useState<UserResponse[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState<UserResponse | null>(null);
   const [formData, setFormData] = useState<UserRequest>({ username: '', fullName: '' });
-  const [submitting, setSubmitting] = useState(false);
 
-  // Fetch users
-  const fetchUsers = async () => {
-    try {
-      setLoading(true);
-      const response = await userApi.getAll();
-      setUsers(response.data.data || []);
-      setError('');
-    } catch (err) {
-      const axiosError = err as AxiosError<ApiResponse<null>>;
-      setError(axiosError.response?.data?.message || 'Không thể tải danh sách users');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data: users = [], isLoading, error } = useUsers();
+  const createMutation = useCreateUser();
+  const updateMutation = useUpdateUser();
+  const deleteMutation = useDeleteUser();
 
-  useEffect(() => {
-    fetchUsers();
-  }, []);
-
-  // Open modal for create/edit
   const openModal = (user: UserResponse | null = null) => {
     if (user) {
       setEditingUser(user);
@@ -43,238 +45,252 @@ const UserManagement = () => {
     setShowModal(true);
   };
 
-  // Close modal
   const closeModal = () => {
     setShowModal(false);
     setEditingUser(null);
     setFormData({ username: '', fullName: '' });
   };
 
-  // Handle form change
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // Handle form submit
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setSubmitting(true);
-
-    try {
-      if (editingUser) {
-        await userApi.update(editingUser.id, formData);
-      } else {
-        await userApi.create(formData);
-      }
-      closeModal();
-      fetchUsers();
-    } catch (err) {
-      const axiosError = err as AxiosError<ApiResponse<null>>;
-      setError(axiosError.response?.data?.message || 'Có lỗi xảy ra');
-    } finally {
-      setSubmitting(false);
+    if (editingUser) {
+      updateMutation.mutate({ id: editingUser.id, data: formData }, { onSuccess: closeModal });
+    } else {
+      createMutation.mutate(formData, { onSuccess: closeModal });
     }
   };
 
-  // Handle delete
-  const handleDelete = async (id: number, username: string) => {
-    if (!window.confirm(`Bạn có chắc muốn xóa user "${username}"?`)) {
-      return;
-    }
-
-    try {
-      await userApi.delete(id);
-      fetchUsers();
-    } catch (err) {
-      const axiosError = err as AxiosError<ApiResponse<null>>;
-      setError(axiosError.response?.data?.message || 'Không thể xóa user');
-    }
+  const handleDelete = (id: number, username: string) => {
+    if (!window.confirm(`Bạn có chắc muốn xóa user "${username}"?`)) return;
+    deleteMutation.mutate(id);
   };
+
+  const isSubmitting = createMutation.isPending || updateMutation.isPending;
+  const mutationError = createMutation.error || updateMutation.error || deleteMutation.error;
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Quản lý Users</h1>
-        <button
-          onClick={() => openModal()}
-          className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition flex items-center"
-        >
-          <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Thêm User
-        </button>
-      </div>
-
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md mb-4">
-          {error}
-          <button onClick={() => setError('')} className="float-right font-bold">&times;</button>
+    <div className="min-h-[calc(100vh-56px)] bg-slate-50 dark:bg-slate-900">
+      <div className="container max-w-6xl py-8">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Quản lý Users</h1>
+            <p className="text-muted-foreground mt-1">Quản lý tài khoản người dùng trong hệ thống</p>
+          </div>
+          <Button onClick={() => openModal()} className="gap-2">
+            <PlusIcon className="h-4 w-4" />
+            Thêm User
+          </Button>
         </div>
-      )}
 
-      {loading ? (
-        <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-        </div>
-      ) : users.length === 0 ? (
-        <div className="text-center py-12 bg-gray-50 rounded-lg">
-          <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
-          </svg>
-          <h3 className="mt-2 text-lg font-medium text-gray-900">Chưa có user nào</h3>
-          <p className="mt-1 text-gray-500">Bắt đầu bằng việc thêm user mới.</p>
-        </div>
-      ) : (
-        <div className="bg-white shadow-md rounded-lg overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  ID
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Username
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Họ và tên
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Thao tác
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {users.map((user) => (
-                <tr key={user.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {user.id}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center mr-3">
-                        <span className="text-blue-600 font-medium text-sm">
-                          {user.username?.charAt(0).toUpperCase()}
-                        </span>
-                      </div>
-                      <span className="text-sm font-medium text-gray-900">{user.username}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {user.fullName}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button
-                      onClick={() => openModal(user)}
-                      className="text-blue-600 hover:text-blue-900 mr-4"
-                    >
-                      Sửa
-                    </button>
-                    <button
-                      onClick={() => handleDelete(user.id, user.username)}
-                      className="text-red-600 hover:text-red-900"
-                    >
-                      Xóa
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+        {/* Error Alert */}
+        {(error || mutationError) && (
+          <div className="flex items-center gap-2 bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg mb-6">
+            <AlertCircleIcon className="h-4 w-4 flex-shrink-0" />
+            <span className="text-sm">{(error as Error)?.message || (mutationError as Error)?.message || 'Có lỗi xảy ra'}</span>
+          </div>
+        )}
 
-      {/* Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
-            <div className="flex justify-between items-center px-6 py-4 border-b">
-              <h3 className="text-lg font-semibold text-gray-900">
-                {editingUser ? 'Chỉnh sửa User' : 'Thêm User mới'}
-              </h3>
-              <button onClick={closeModal} className="text-gray-400 hover:text-gray-600">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="p-6">
-              <div className="space-y-4">
+        {/* Content */}
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center py-20">
+            <LoadingSpinner className="h-10 w-10 text-primary" />
+            <p className="mt-4 text-muted-foreground">Đang tải dữ liệu...</p>
+          </div>
+        ) : users.length === 0 ? (
+          <Card className="border-dashed">
+            <CardContent className="flex flex-col items-center justify-center py-16">
+              <div className="rounded-full bg-muted p-4 mb-4">
+                <UsersIcon className="h-8 w-8 text-muted-foreground" />
+              </div>
+              <h3 className="text-lg font-semibold">Chưa có user nào</h3>
+              <p className="text-muted-foreground mt-1 mb-4">Bắt đầu bằng việc thêm user mới</p>
+              <Button onClick={() => openModal()} className="gap-2">
+                <PlusIcon className="h-4 w-4" />
+                Thêm User đầu tiên
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
                 <div>
-                  <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
-                    Username
-                  </label>
-                  <input
+                  <CardTitle>Danh sách Users</CardTitle>
+                  <CardDescription>Tổng cộng {users.length} người dùng</CardDescription>
+                </div>
+                <Badge variant="secondary" className="text-sm">
+                  {users.length} users
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50">
+                    <TableHead className="w-16">ID</TableHead>
+                    <TableHead>Username</TableHead>
+                    <TableHead>Họ và tên</TableHead>
+                    <TableHead className="text-right w-40">Thao tác</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {users.map((user) => (
+                    <TableRow key={user.id} className="group">
+                      <TableCell>
+                        <Badge variant="outline">#{user.id}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-9 w-9 border">
+                            <AvatarFallback className="bg-gradient-to-br from-primary/80 to-primary text-primary-foreground text-sm font-medium">
+                              {user.username?.charAt(0).toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <p className="font-medium">@{user.username}</p>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{user.fullName}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button variant="ghost" size="sm" onClick={() => openModal(user)} className="h-8 gap-1">
+                            <EditIcon className="h-3.5 w-3.5" />
+                            Sửa
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDelete(user.id, user.username)}
+                            disabled={deleteMutation.isPending}
+                            className="h-8 gap-1 text-destructive hover:text-destructive hover:bg-destructive/10"
+                          >
+                            <TrashIcon className="h-3.5 w-3.5" />
+                            Xóa
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Modal */}
+        <Dialog open={showModal} onOpenChange={setShowModal}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                {editingUser ? <EditIcon className="h-5 w-5" /> : <PlusIcon className="h-5 w-5" />}
+                {editingUser ? 'Chỉnh sửa User' : 'Thêm User mới'}
+              </DialogTitle>
+              <DialogDescription>
+                {editingUser ? 'Cập nhật thông tin người dùng' : 'Điền thông tin để tạo user mới'}
+              </DialogDescription>
+            </DialogHeader>
+
+            <form onSubmit={handleSubmit}>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="username">Username</Label>
+                  <Input
                     id="username"
                     name="username"
-                    type="text"
                     value={formData.username}
                     onChange={handleChange}
                     required
                     minLength={3}
                     maxLength={50}
                     disabled={!!editingUser}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                     placeholder="Nhập username"
                   />
                   {editingUser && (
-                    <p className="text-xs text-gray-500 mt-1">Username không thể thay đổi</p>
+                    <p className="text-xs text-muted-foreground">Username không thể thay đổi</p>
                   )}
                 </div>
 
-                <div>
-                  <label htmlFor="fullName" className="block text-sm font-medium text-gray-700 mb-1">
-                    Họ và tên
-                  </label>
-                  <input
+                <div className="space-y-2">
+                  <Label htmlFor="fullName">Họ và tên</Label>
+                  <Input
                     id="fullName"
                     name="fullName"
-                    type="text"
                     value={formData.fullName}
                     onChange={handleChange}
                     required
                     minLength={2}
                     maxLength={100}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="Nhập họ và tên"
                   />
                 </div>
               </div>
 
-              <div className="flex justify-end space-x-3 mt-6">
-                <button
-                  type="button"
-                  onClick={closeModal}
-                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition"
-                >
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={closeModal}>
                   Hủy
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-                >
-                  {submitting ? (
+                </Button>
+                <Button type="submit" disabled={isSubmitting} className="gap-2">
+                  {isSubmitting ? (
                     <>
-                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
+                      <LoadingSpinner className="h-4 w-4" />
                       Đang lưu...
                     </>
                   ) : (
                     'Lưu'
                   )}
-                </button>
-              </div>
+                </Button>
+              </DialogFooter>
             </form>
-          </div>
-        </div>
-      )}
+          </DialogContent>
+        </Dialog>
+      </div>
     </div>
   );
 };
+
+// Icons
+const PlusIcon = ({ className }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+  </svg>
+);
+
+const UsersIcon = ({ className }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+  </svg>
+);
+
+const EditIcon = ({ className }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+  </svg>
+);
+
+const TrashIcon = ({ className }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+  </svg>
+);
+
+const AlertCircleIcon = ({ className }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+  </svg>
+);
+
+const LoadingSpinner = ({ className }: { className?: string }) => (
+  <svg className={`animate-spin ${className}`} fill="none" viewBox="0 0 24 24">
+    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+  </svg>
+);
 
 export default UserManagement;

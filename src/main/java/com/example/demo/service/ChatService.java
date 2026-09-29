@@ -117,6 +117,26 @@ public class ChatService {
     }
 
     /**
+     * Lấy username từ userId
+     */
+    @Transactional(readOnly = true)
+    public String getUsernameById(Long userId) {
+        return userRepository.findById(userId)
+                .map(UserEntity::getUsername)
+                .orElse(null);
+    }
+
+    /**
+     * Lấy userId từ username
+     */
+    @Transactional(readOnly = true)
+    public Long getUserIdByUsername(String username) {
+        return userRepository.findByUsername(username)
+                .map(UserEntity::getId)
+                .orElse(null);
+    }
+
+    /**
      * Build ConversationDTO cho 1 partner
      */
     private ConversationDTO buildConversationDTO(Long userId, Long partnerId) {

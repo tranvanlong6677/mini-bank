@@ -1,50 +1,86 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { chatApi, userApi } from '../services/api';
 import { ChatMessage, Conversation, UserResponse } from '../types';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
+import { cn } from '@/lib/utils';
 
-/**
- * Trang Chat - Real-time messaging giữa 2 users
- */
 export default function ChatPage() {
-  // Lấy userId từ localStorage (trong thực tế nên lấy từ context)
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
-  
-  // Danh sách conversations (sidebar)
+  const [currentUsername, setCurrentUsername] = useState<string | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  
-  // Danh sách users (để start chat mới)
   const [users, setUsers] = useState<UserResponse[]>([]);
-  
-  // Conversation đang active
   const [selectedPartnerId, setSelectedPartnerId] = useState<number | null>(null);
   const [selectedPartnerName, setSelectedPartnerName] = useState<string>('');
-  
-  // Tin nhắn history + real-time
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
-  
-  // Input message
   const [inputMessage, setInputMessage] = useState('');
-  
-  // Ref để auto-scroll
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const selectedPartnerIdRef = useRef<number | null>(null);
 
-  // WebSocket hook
-  const { connected, messages: wsMessages, sendMessage, clearMessages } = useWebSocket(currentUserId);
+  const handleNewMessage = useCallback((message: ChatMessage) => {
+    const partnerId = selectedPartnerIdRef.current;
+    if (partnerId && (message.senderId === partnerId || message.receiverId === partnerId)) {
+      setChatHistory(prev => {
+        const exists = prev.some(
+          m =>
+            m.id === message.id ||
+            (m.content === message.content &&
+              m.senderId === message.senderId &&
+              m.sentAt === message.sentAt)
+        );
+        if (exists) return prev;
+        return [...prev, message];
+      });
+    }
+    loadConversations();
+  }, []);
 
-  // Lấy currentUserId từ users list (tạm thời)
+  // Callback khi tin nhắn được đọc
+  const handleReadReceipt = useCallback((senderId: number) => {
+    // Update UI để hiển thị "đã đọc" cho các tin nhắn
+    setChatHistory(prev =>
+      prev.map(msg => (msg.receiverId === senderId ? { ...msg, isRead: true } : msg))
+    );
+  }, []);
+
+  const { connected, sendMessage, sendTyping, markAsRead, typingUser } = useWebSocket(
+    currentUserId,
+    currentUsername,
+    handleNewMessage,
+    handleReadReceipt
+  );
+
+  console.log('check in page', { typingUser });
+
+  useEffect(() => {
+    selectedPartnerIdRef.current = selectedPartnerId;
+  }, [selectedPartnerId]);
+
   useEffect(() => {
     const username = localStorage.getItem('user');
+    console.log('🔍 Loading current user from localStorage:', username);
     if (username) {
       try {
         const user = JSON.parse(username);
-        // Fetch user ID từ API
+        console.log('🔍 Parsed user:', user);
+        setCurrentUsername(user.username); // Set username để subscribe topic
         userApi.getAll().then(res => {
+          console.log('🔍 All users from API:', res.data.data);
           const currentUser = res.data.data.find(u => u.username === user.username);
+          console.log('🔍 Current user found:', currentUser);
           if (currentUser) {
+            console.log('✅ Setting currentUserId:', currentUser.id);
             setCurrentUserId(currentUser.id);
+          } else {
+            console.error('❌ Current user not found in users list!');
           }
-          // Lọc users khác để hiển thị
           setUsers(res.data.data.filter(u => u.username !== user.username));
         });
       } catch (e) {
@@ -53,34 +89,24 @@ export default function ChatPage() {
     }
   }, []);
 
-  // Load conversations khi có userId
   useEffect(() => {
-    if (currentUserId) {
-      loadConversations();
-    }
+    if (currentUserId) loadConversations();
   }, [currentUserId]);
 
-  // Merge WebSocket messages vào chat history
-  useEffect(() => {
-    if (wsMessages.length > 0) {
-      const lastMessage = wsMessages[wsMessages.length - 1];
-      
-      // Chỉ add nếu message thuộc conversation đang active
-      if (selectedPartnerId && 
-          (lastMessage.senderId === selectedPartnerId || 
-           lastMessage.receiverId === selectedPartnerId)) {
-        setChatHistory(prev => [...prev, lastMessage]);
+  // Scroll to bottom khi chatHistory thay đổi hoặc có tin nhắn mới
+  const scrollToBottom = useCallback(() => {
+    // Delay nhỏ để đảm bảo DOM đã render xong
+    setTimeout(() => {
+      if (scrollAreaRef.current) {
+        const viewport = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
+        if (viewport) {
+          viewport.scrollTop = viewport.scrollHeight;
+        }
       }
-      
-      // Refresh conversations để update lastMessage
-      loadConversations();
-    }
-  }, [wsMessages, selectedPartnerId]);
-
-  // Auto-scroll khi có tin nhắn mới
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chatHistory]);
+      // Fallback với messagesEndRef
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 50);
+  }, []);
 
   const loadConversations = async () => {
     try {
@@ -94,12 +120,17 @@ export default function ChatPage() {
   const selectConversation = async (partnerId: number, partnerName: string) => {
     setSelectedPartnerId(partnerId);
     setSelectedPartnerName(partnerName);
-    clearMessages();
-    
-    // Load chat history
+
     try {
       const res = await chatApi.getHistory(partnerId);
       setChatHistory(res.data.data || []);
+
+      // Scroll xuống cuối sau khi load history
+      setTimeout(() => scrollToBottom(), 100);
+
+      markAsRead(partnerId);
+      await chatApi.markAsRead(partnerId);
+      loadConversations();
     } catch (error) {
       console.error('Error loading chat history:', error);
       setChatHistory([]);
@@ -107,9 +138,20 @@ export default function ChatPage() {
   };
 
   const handleSendMessage = () => {
-    if (!inputMessage.trim() || !selectedPartnerId) return;
-    
-    sendMessage(selectedPartnerId, inputMessage.trim());
+    if (!inputMessage.trim() || !selectedPartnerId || !currentUserId) return;
+
+    const messageContent = inputMessage.trim();
+    const optimisticMessage: ChatMessage = {
+      senderId: currentUserId,
+      receiverId: selectedPartnerId,
+      content: messageContent,
+      type: 'CHAT',
+      sentAt: new Date().toISOString(),
+      isRead: false,
+    };
+
+    setChatHistory(prev => [...prev, optimisticMessage]);
+    sendMessage(selectedPartnerId, messageContent);
     setInputMessage('');
   };
 
@@ -120,6 +162,32 @@ export default function ChatPage() {
     }
   };
 
+  // Gọi sendTyping khi user đang gõ
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setInputMessage(e.target.value);
+    if (selectedPartnerId && e.target.value.trim()) {
+      sendTyping(selectedPartnerId);
+    }
+  };
+
+  // Kiểm tra xem partner có đang typing không
+  // Phải kiểm tra typingUser !== null để tránh null === null = true
+  const isPartnerTyping = useMemo(() => {
+    return typingUser !== null && typingUser === selectedPartnerId;
+  }, [typingUser, selectedPartnerId]);
+
+  // Scroll xuống khi có tin nhắn mới hoặc khi partner đang gõ
+  useEffect(() => {
+    scrollToBottom();
+  }, [chatHistory, isPartnerTyping, scrollToBottom]);
+
+  console.log('check in typing123', { isPartnerTyping, typingUser, selectedPartnerId });
+
+  // Debug log
+  useEffect(() => {
+    // setIsPartnerTyping(typingUser !== null && typingUser === selectedPartnerId)
+  }, [typingUser, selectedPartnerId]);
+
   const formatTime = (dateStr?: string) => {
     if (!dateStr) return '';
     const date = new Date(dateStr);
@@ -127,139 +195,263 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-100px)] bg-gray-100">
-      {/* Sidebar - Conversations & Users */}
-      <div className="w-80 bg-white border-r flex flex-col">
-        {/* Header */}
-        <div className="p-4 border-b">
-          <h2 className="text-xl font-bold">Messages</h2>
-          <div className={`text-sm ${connected ? 'text-green-500' : 'text-red-500'}`}>
-            {connected ? '● Connected' : '○ Disconnected'}
-          </div>
-        </div>
-
-        {/* Conversations List */}
-        <div className="flex-1 overflow-y-auto">
-          {conversations.length > 0 && (
-            <div className="p-2">
-              <h3 className="text-xs font-semibold text-gray-500 uppercase px-2 mb-2">
-                Recent Chats
-              </h3>
-              {conversations.map((conv) => (
-                <div
-                  key={conv.partnerId}
-                  onClick={() => selectConversation(conv.partnerId, conv.partnerName)}
-                  className={`p-3 rounded-lg cursor-pointer mb-1 ${
-                    selectedPartnerId === conv.partnerId 
-                      ? 'bg-blue-100' 
-                      : 'hover:bg-gray-100'
-                  }`}
-                >
-                  <div className="flex justify-between items-start">
-                    <span className="font-medium">{conv.partnerName}</span>
-                    {conv.unreadCount > 0 && (
-                      <span className="bg-blue-500 text-white text-xs rounded-full px-2 py-0.5">
-                        {conv.unreadCount}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-sm text-gray-500 truncate">{conv.lastMessage}</p>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Users List (để start chat mới) */}
-          <div className="p-2 border-t">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase px-2 mb-2">
-              All Users
-            </h3>
-            {users.map((user) => (
-              <div
-                key={user.id}
-                onClick={() => selectConversation(user.id, user.fullName)}
-                className={`p-3 rounded-lg cursor-pointer mb-1 ${
-                  selectedPartnerId === user.id 
-                    ? 'bg-blue-100' 
-                    : 'hover:bg-gray-100'
-                }`}
-              >
-                <span className="font-medium">{user.fullName}</span>
-                <p className="text-sm text-gray-400">@{user.username}</p>
+    <div className="h-[calc(100vh-56px)] bg-slate-50 dark:bg-slate-900">
+      <div className="container max-w-7xl h-full py-4">
+        <Card className="h-full flex overflow-hidden">
+          {/* Sidebar */}
+          <div className="w-80 border-r flex flex-col bg-muted/30">
+            {/* Sidebar Header */}
+            <div className="p-4 border-b">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold">Messages</h2>
+                <Badge variant={connected ? 'default' : 'destructive'} className="text-xs">
+                  {connected ? (
+                    <>
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-400 mr-1.5 animate-pulse" />
+                      Online
+                    </>
+                  ) : (
+                    <>
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-400 mr-1.5" />
+                      Offline
+                    </>
+                  )}
+                </Badge>
               </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Chat Area */}
-      <div className="flex-1 flex flex-col">
-        {selectedPartnerId ? (
-          <>
-            {/* Chat Header */}
-            <div className="p-4 bg-white border-b">
-              <h3 className="font-bold text-lg">{selectedPartnerName}</h3>
             </div>
 
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {chatHistory.map((msg, index) => (
-                <div
-                  key={msg.id || index}
-                  className={`flex ${
-                    msg.senderId === currentUserId ? 'justify-end' : 'justify-start'
-                  }`}
-                >
-                  <div
-                    className={`max-w-[70%] rounded-lg px-4 py-2 ${
-                      msg.senderId === currentUserId
-                        ? 'bg-blue-500 text-white'
-                        : 'bg-white text-gray-800'
-                    }`}
+            <ScrollArea className="flex-1">
+              {/* Conversations */}
+              {conversations.length > 0 && (
+                <div className="p-2">
+                  <p className="px-2 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    Đoạn chat gần đây
+                  </p>
+                  {conversations.map(conv => (
+                    <button
+                      key={conv.partnerId}
+                      onClick={() => selectConversation(conv.partnerId, conv.partnerName)}
+                      className={cn(
+                        'w-full flex items-center gap-3 p-3 rounded-lg text-left transition-colors',
+                        selectedPartnerId === conv.partnerId
+                          ? 'bg-primary/10 border border-primary/20'
+                          : 'hover:bg-muted'
+                      )}
+                    >
+                      <Avatar className="h-10 w-10 border">
+                        <AvatarFallback className="bg-gradient-to-br from-primary/80 to-primary text-primary-foreground">
+                          {conv.partnerName?.charAt(0).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium truncate">{conv.partnerName}</span>
+                          {conv.unreadCount > 0 && (
+                            <Badge className="h-5 min-w-[20px] text-xs">{conv.unreadCount}</Badge>
+                          )}
+                        </div>
+                        {typingUser === conv.partnerId ? (
+                          <div className="flex items-center gap-1 text-sm text-primary">
+                            <span
+                              className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce"
+                              style={{ animationDelay: '0ms' }}
+                            />
+                            <span
+                              className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce"
+                              style={{ animationDelay: '150ms' }}
+                            />
+                            <span
+                              className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce"
+                              style={{ animationDelay: '300ms' }}
+                            />
+                            <span className="ml-1 italic">đang nhập...</span>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground truncate">
+                            {conv.lastMessage}
+                          </p>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <Separator className="my-2" />
+
+              {/* All Users */}
+              <div className="p-2">
+                <p className="px-2 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Tất cả người dùng
+                </p>
+                {users.map(user => (
+                  <button
+                    key={user.id}
+                    onClick={() => selectConversation(user.id, user.fullName)}
+                    className={cn(
+                      'w-full flex items-center gap-3 p-3 rounded-lg text-left transition-colors',
+                      selectedPartnerId === user.id
+                        ? 'bg-primary/10 border border-primary/20'
+                        : 'hover:bg-muted'
+                    )}
                   >
-                    <p>{msg.content}</p>
-                    <p className={`text-xs mt-1 ${
-                      msg.senderId === currentUserId ? 'text-blue-100' : 'text-gray-400'
-                    }`}>
-                      {formatTime(msg.sentAt)}
+                    <Avatar className="h-10 w-10 border">
+                      <AvatarFallback className="bg-gradient-to-br from-slate-400 to-slate-500 text-white">
+                        {user.fullName?.charAt(0).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <span className="font-medium truncate block">{user.fullName}</span>
+                      <span className="text-sm text-muted-foreground">@{user.username}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </ScrollArea>
+          </div>
+
+          {/* Chat Area */}
+          <div className="flex-1 flex flex-col">
+            {selectedPartnerId ? (
+              <>
+                {/* Chat Header */}
+                <div className="p-4 border-b flex items-center gap-3 bg-background">
+                  <Avatar className="h-10 w-10 border">
+                    <AvatarFallback className="bg-gradient-to-br from-primary/80 to-primary text-primary-foreground">
+                      {selectedPartnerName?.charAt(0).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <h3 className="font-semibold">{selectedPartnerName}</h3>
+                    <p className="text-xs text-muted-foreground">
+                      {connected ? 'Đang kết nối' : 'Không kết nối'}
                     </p>
                   </div>
                 </div>
-              ))}
-              <div ref={messagesEndRef} />
-            </div>
 
-            {/* Input Area */}
-            <div className="p-4 bg-white border-t">
-              <div className="flex space-x-2">
-                <input
-                  type="text"
-                  value={inputMessage}
-                  onChange={(e) => setInputMessage(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  placeholder="Type a message..."
-                  className="flex-1 border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <button
-                  onClick={handleSendMessage}
-                  disabled={!connected || !inputMessage.trim()}
-                  className="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
-                >
-                  Send
-                </button>
+                {/* Messages */}
+                <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
+                  <div className="space-y-3">
+                    {chatHistory.map((msg, index) => {
+                      const isSender = msg.senderId === currentUserId;
+                      return (
+                        <div
+                          key={msg.id || `msg-${index}-${msg.sentAt}`}
+                          className={cn('flex', isSender ? 'justify-end' : 'justify-start')}
+                        >
+                          <div
+                            className={cn(
+                              'max-w-[70%] rounded-2xl px-4 py-2.5 shadow-sm',
+                              isSender
+                                ? 'bg-primary text-primary-foreground rounded-br-md'
+                                : 'bg-muted rounded-bl-md'
+                            )}
+                          >
+                            <p className="text-sm leading-relaxed">{msg.content}</p>
+                            <p
+                              className={cn(
+                                'text-[10px] mt-1 flex items-center gap-1',
+                                isSender
+                                  ? 'text-primary-foreground/70 justify-end'
+                                  : 'text-muted-foreground'
+                              )}
+                            >
+                              {formatTime(msg.sentAt)}
+                              {isSender && <span>{msg.isRead ? '✓✓' : '✓'}</span>}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {/* Typing Indicator */}
+                    {isPartnerTyping && (
+                      <div className="flex justify-start items-center gap-2">
+                        <div className="bg-muted rounded-2xl rounded-bl-md px-4 py-2.5 shadow-sm flex items-center gap-2">
+                          <div className="flex items-center gap-1">
+                            <span
+                              className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                              style={{ animationDelay: '0ms' }}
+                            />
+                            <span
+                              className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                              style={{ animationDelay: '150ms' }}
+                            />
+                            <span
+                              className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                              style={{ animationDelay: '300ms' }}
+                            />
+                          </div>
+                          <span className="text-xs text-muted-foreground ml-1">
+                            {selectedPartnerName} đang gõ...
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    <div ref={messagesEndRef} />
+                  </div>
+                </ScrollArea>
+
+                {/* Input Area */}
+                <div className="p-4 border-t bg-background">
+                  <div className="flex gap-2">
+                    <Input
+                      value={inputMessage}
+                      onChange={handleInputChange}
+                      onKeyPress={handleKeyPress}
+                      placeholder="Nhập tin nhắn..."
+                      className="flex-1"
+                      disabled={!connected}
+                    />
+                    <Button
+                      onClick={handleSendMessage}
+                      disabled={!connected || !inputMessage.trim()}
+                      className="gap-2"
+                    >
+                      <SendIcon className="h-4 w-4" />
+                      <span className="hidden sm:inline">Gửi</span>
+                    </Button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground">
+                <div className="rounded-full bg-muted p-6 mb-4">
+                  <MessageCircleIcon className="h-12 w-12" />
+                </div>
+                <h3 className="text-xl font-semibold text-foreground mb-2">Chọn đoạn chat</h3>
+                <p className="text-center max-w-sm">
+                  Chọn một người dùng từ danh sách bên trái để bắt đầu trò chuyện
+                </p>
               </div>
-            </div>
-          </>
-        ) : (
-          // No conversation selected
-          <div className="flex-1 flex items-center justify-center text-gray-500">
-            <div className="text-center">
-              <div className="text-6xl mb-4">💬</div>
-              <p className="text-xl">Select a conversation to start chatting</p>
-            </div>
+            )}
           </div>
-        )}
+        </Card>
       </div>
     </div>
   );
 }
+
+// Icons
+const SendIcon = ({ className }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={2}
+      d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+    />
+  </svg>
+);
+
+const MessageCircleIcon = ({ className }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={2}
+      d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+    />
+  </svg>
+);

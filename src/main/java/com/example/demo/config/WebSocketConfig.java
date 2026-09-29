@@ -31,7 +31,8 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         // Prefix cho messages từ SERVER -> CLIENT
         // /topic = broadcast cho nhiều người (group chat, notifications)
         // /queue = private message cho 1 người
-        config.enableSimpleBroker("/topic", "/queue");
+        // /user = user-specific destinations (QUAN TRỌNG: phải thêm /user vào đây!)
+        config.enableSimpleBroker("/topic", "/queue", "/user");
         
         // Prefix cho messages từ CLIENT -> SERVER
         // Client gửi đến /app/chat.send -> Server nhận ở @MessageMapping("/chat.send")

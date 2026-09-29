@@ -5,11 +5,11 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.cloud.openfeign.EnableFeignClients;
 
 @SpringBootApplication
-@EnableFeignClients  // Bật Feign Client
-public class MiniBankApplication {
+@EnableFeignClients
+public class LifeHubApplication {
 
 	public static void main(String[] args) {
-		SpringApplication.run(MiniBankApplication.class, args);
+		SpringApplication.run(LifeHubApplication.class, args);
 	}
 
 }

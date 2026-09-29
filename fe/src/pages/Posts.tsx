@@ -1,233 +1,230 @@
-import { useState, useEffect, FormEvent, ChangeEvent } from 'react';
-import { postApi } from '../services/api';
-import { AxiosError } from 'axios';
-import type { Post, PostRequest, ApiResponse } from '../types';
+import { useState, FormEvent, ChangeEvent } from 'react';
+import { usePosts, useCreatePost } from '../hooks/usePosts';
+import type { Post, PostRequest } from '../types';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
 
 const Posts = () => {
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [formData, setFormData] = useState<PostRequest>({ userId: 1, title: '', body: '' });
-  const [submitting, setSubmitting] = useState(false);
-  const [filterUserId, setFilterUserId] = useState<string>('');
+  const [filterUserId, setFilterUserId] = useState<number | undefined>(undefined);
+  const [filterInput, setFilterInput] = useState('');
 
-  // Fetch posts
-  const fetchPosts = async (userId?: number) => {
-    try {
-      setLoading(true);
-      const response = userId 
-        ? await postApi.getByUserId(userId)
-        : await postApi.getAll();
-      setPosts(response.data.data || []);
-      setError('');
-    } catch (err) {
-      const axiosError = err as AxiosError<ApiResponse<null>>;
-      setError(axiosError.response?.data?.message || 'Không thể tải danh sách posts');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data: posts = [], isLoading, error } = usePosts(filterUserId);
+  const createMutation = useCreatePost();
 
-  useEffect(() => {
-    fetchPosts();
-  }, []);
-
-  // Filter by userId
   const handleFilter = () => {
-    if (filterUserId) {
-      fetchPosts(parseInt(filterUserId));
+    if (filterInput) {
+      setFilterUserId(parseInt(filterInput));
     } else {
-      fetchPosts();
+      setFilterUserId(undefined);
     }
   };
 
-  // Clear filter
   const clearFilter = () => {
-    setFilterUserId('');
-    fetchPosts();
+    setFilterInput('');
+    setFilterUserId(undefined);
   };
 
-  // Open modal for create
   const openCreateModal = () => {
     setSelectedPost(null);
     setFormData({ userId: 1, title: '', body: '' });
     setShowModal(true);
   };
 
-  // Open modal for view
   const openViewModal = (post: Post) => {
     setSelectedPost(post);
     setShowModal(true);
   };
 
-  // Close modal
   const closeModal = () => {
     setShowModal(false);
     setSelectedPost(null);
     setFormData({ userId: 1, title: '', body: '' });
   };
 
-  // Handle form change
   const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ 
-      ...prev, 
-      [name]: name === 'userId' ? parseInt(value) || 1 : value 
+    setFormData((prev) => ({
+      ...prev,
+      [name]: name === 'userId' ? parseInt(value) || 1 : value,
     }));
   };
 
-  // Handle form submit
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setSubmitting(true);
-
-    try {
-      await postApi.create(formData);
-      closeModal();
-      // Note: JSONPlaceholder là fake API, post mới không được lưu thật
-      // Nhưng vẫn hiển thị alert để demo
-      alert('Tạo post thành công! (Note: JSONPlaceholder là fake API)');
-      fetchPosts();
-    } catch (err) {
-      const axiosError = err as AxiosError<ApiResponse<null>>;
-      setError(axiosError.response?.data?.message || 'Có lỗi xảy ra');
-    } finally {
-      setSubmitting(false);
-    }
+    createMutation.mutate(formData, {
+      onSuccess: () => {
+        closeModal();
+        alert('Tạo post thành công! (Note: JSONPlaceholder là fake API)');
+      },
+    });
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Posts</h1>
-        <button
-          onClick={openCreateModal}
-          className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition flex items-center"
-        >
-          <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Tạo Post
-        </button>
-      </div>
+    <div className="min-h-[calc(100vh-56px)] bg-slate-50 dark:bg-slate-900">
+      <div className="container max-w-6xl py-8">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Posts</h1>
+            <p className="text-muted-foreground mt-1">Dữ liệu từ JSONPlaceholder API</p>
+          </div>
+          <Button onClick={openCreateModal} className="gap-2">
+            <PlusIcon className="h-4 w-4" />
+            Tạo Post
+          </Button>
+        </div>
 
-      {/* Filter */}
-      <div className="bg-white p-4 rounded-lg shadow-md mb-6">
-        <div className="flex items-center space-x-4">
-          <label className="text-sm font-medium text-gray-700">Lọc theo User ID:</label>
-          <input
-            type="number"
-            value={filterUserId}
-            onChange={(e) => setFilterUserId(e.target.value)}
-            className="w-32 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="User ID"
-            min="1"
-          />
-          <button
-            onClick={handleFilter}
-            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition"
-          >
-            Lọc
-          </button>
-          {filterUserId && (
-            <button
-              onClick={clearFilter}
-              className="text-gray-600 hover:text-gray-800 px-4 py-2 transition"
-            >
-              Xóa bộ lọc
-            </button>
-          )}
-        </div>
-      </div>
-
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md mb-4">
-          {error}
-          <button onClick={() => setError('')} className="float-right font-bold">&times;</button>
-        </div>
-      )}
-
-      {loading ? (
-        <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-        </div>
-      ) : posts.length === 0 ? (
-        <div className="text-center py-12 bg-gray-50 rounded-lg">
-          <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
-          </svg>
-          <h3 className="mt-2 text-lg font-medium text-gray-900">Chưa có post nào</h3>
-          <p className="mt-1 text-gray-500">Bắt đầu bằng việc tạo post mới.</p>
-        </div>
-      ) : (
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {posts.map((post) => (
-            <div
-              key={post.id}
-              className="bg-white rounded-lg shadow-md hover:shadow-lg transition cursor-pointer"
-              onClick={() => openViewModal(post)}
-            >
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs font-medium text-blue-600 bg-blue-100 px-2 py-1 rounded">
-                    User #{post.userId}
-                  </span>
-                  <span className="text-xs text-gray-400">#{post.id}</span>
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2 line-clamp-2">
-                  {post.title}
-                </h3>
-                <p className="text-gray-600 text-sm line-clamp-3">
-                  {post.body}
-                </p>
+        {/* Filter */}
+        <Card className="mb-6">
+          <CardContent className="pt-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+              <div className="flex items-center gap-2">
+                <FilterIcon className="h-4 w-4 text-muted-foreground" />
+                <Label className="text-sm font-medium whitespace-nowrap">Lọc theo User ID:</Label>
               </div>
+              <div className="flex flex-1 items-center gap-2">
+                <Input
+                  type="number"
+                  value={filterInput}
+                  onChange={(e) => setFilterInput(e.target.value)}
+                  className="w-32"
+                  placeholder="User ID"
+                  min="1"
+                />
+                <Button onClick={handleFilter} size="sm">
+                  Lọc
+                </Button>
+                {filterUserId && (
+                  <Button variant="ghost" size="sm" onClick={clearFilter}>
+                    <XIcon className="h-4 w-4 mr-1" />
+                    Xóa
+                  </Button>
+                )}
+              </div>
+              {filterUserId && (
+                <Badge variant="secondary">
+                  Đang lọc: User #{filterUserId}
+                </Badge>
+              )}
             </div>
-          ))}
-        </div>
-      )}
+          </CardContent>
+        </Card>
 
-      {/* Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center px-6 py-4 border-b sticky top-0 bg-white">
-              <h3 className="text-lg font-semibold text-gray-900">
-                {selectedPost ? 'Chi tiết Post' : 'Tạo Post mới'}
-              </h3>
-              <button onClick={closeModal} className="text-gray-400 hover:text-gray-600">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+        {/* Error */}
+        {(error || createMutation.error) && (
+          <div className="flex items-center gap-2 bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg mb-6">
+            <AlertCircleIcon className="h-4 w-4 flex-shrink-0" />
+            <span className="text-sm">{(error as Error)?.message || (createMutation.error as Error)?.message || 'Có lỗi xảy ra'}</span>
+          </div>
+        )}
+
+        {/* Content */}
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center py-20">
+            <LoadingSpinner className="h-10 w-10 text-primary" />
+            <p className="mt-4 text-muted-foreground">Đang tải dữ liệu...</p>
+          </div>
+        ) : posts.length === 0 ? (
+          <Card className="border-dashed">
+            <CardContent className="flex flex-col items-center justify-center py-16">
+              <div className="rounded-full bg-muted p-4 mb-4">
+                <FileTextIcon className="h-8 w-8 text-muted-foreground" />
+              </div>
+              <h3 className="text-lg font-semibold">Chưa có post nào</h3>
+              <p className="text-muted-foreground mt-1 mb-4">Bắt đầu bằng việc tạo post mới</p>
+              <Button onClick={openCreateModal} className="gap-2">
+                <PlusIcon className="h-4 w-4" />
+                Tạo Post đầu tiên
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <>
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-sm text-muted-foreground">
+                Hiển thị {posts.length} posts
+              </p>
             </div>
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {posts.map((post) => (
+                <Card
+                  key={post.id}
+                  className="group cursor-pointer transition-all hover:shadow-lg hover:border-primary/50"
+                  onClick={() => openViewModal(post)}
+                >
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <Badge variant="secondary" className="text-xs">
+                        User #{post.userId}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">#{post.id}</span>
+                    </div>
+                    <CardTitle className="text-base line-clamp-2 group-hover:text-primary transition-colors">
+                      {post.title}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-muted-foreground line-clamp-3">
+                      {post.body}
+                    </p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* Modal */}
+        <Dialog open={showModal} onOpenChange={setShowModal}>
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                {selectedPost ? <EyeIcon className="h-5 w-5" /> : <PlusIcon className="h-5 w-5" />}
+                {selectedPost ? 'Chi tiết Post' : 'Tạo Post mới'}
+              </DialogTitle>
+              <DialogDescription>
+                {selectedPost ? 'Xem chi tiết bài viết' : 'Điền thông tin để tạo post mới'}
+              </DialogDescription>
+            </DialogHeader>
 
             {selectedPost ? (
-              // View mode
-              <div className="p-6">
-                <div className="flex items-center space-x-4 mb-4">
-                  <span className="text-sm font-medium text-blue-600 bg-blue-100 px-3 py-1 rounded">
-                    User #{selectedPost.userId}
-                  </span>
-                  <span className="text-sm text-gray-400">Post #{selectedPost.id}</span>
-                </div>
-                <h2 className="text-xl font-bold text-gray-900 mb-4">
-                  {selectedPost.title}
-                </h2>
-                <p className="text-gray-700 whitespace-pre-wrap">
-                  {selectedPost.body}
-                </p>
-              </div>
-            ) : (
-              // Create mode
-              <form onSubmit={handleSubmit} className="p-6">
-                <div className="space-y-4">
+              <ScrollArea className="max-h-[60vh]">
+                <div className="space-y-4 pr-4">
+                  <div className="flex items-center gap-3">
+                    <Badge>User #{selectedPost.userId}</Badge>
+                    <Badge variant="outline">Post #{selectedPost.id}</Badge>
+                  </div>
+                  <Separator />
                   <div>
-                    <label htmlFor="userId" className="block text-sm font-medium text-gray-700 mb-1">
-                      User ID
-                    </label>
-                    <input
+                    <h3 className="text-lg font-semibold mb-2">{selectedPost.title}</h3>
+                    <p className="text-muted-foreground whitespace-pre-wrap leading-relaxed">
+                      {selectedPost.body}
+                    </p>
+                  </div>
+                </div>
+              </ScrollArea>
+            ) : (
+              <form onSubmit={handleSubmit}>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="userId">User ID</Label>
+                    <Input
                       id="userId"
                       name="userId"
                       type="number"
@@ -235,30 +232,23 @@ const Posts = () => {
                       onChange={handleChange}
                       required
                       min="1"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
 
-                  <div>
-                    <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-1">
-                      Tiêu đề
-                    </label>
-                    <input
+                  <div className="space-y-2">
+                    <Label htmlFor="title">Tiêu đề</Label>
+                    <Input
                       id="title"
                       name="title"
-                      type="text"
                       value={formData.title}
                       onChange={handleChange}
                       required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="Nhập tiêu đề"
                     />
                   </div>
 
-                  <div>
-                    <label htmlFor="body" className="block text-sm font-medium text-gray-700 mb-1">
-                      Nội dung
-                    </label>
+                  <div className="space-y-2">
+                    <Label htmlFor="body">Nội dung</Label>
                     <textarea
                       id="body"
                       name="body"
@@ -266,45 +256,79 @@ const Posts = () => {
                       onChange={handleChange}
                       required
                       rows={5}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                      className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
                       placeholder="Nhập nội dung"
                     />
                   </div>
                 </div>
 
-                <div className="flex justify-end space-x-3 mt-6">
-                  <button
-                    type="button"
-                    onClick={closeModal}
-                    className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition"
-                  >
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={closeModal}>
                     Hủy
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-                  >
-                    {submitting ? (
+                  </Button>
+                  <Button type="submit" disabled={createMutation.isPending} className="gap-2">
+                    {createMutation.isPending ? (
                       <>
-                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
+                        <LoadingSpinner className="h-4 w-4" />
                         Đang tạo...
                       </>
                     ) : (
                       'Tạo Post'
                     )}
-                  </button>
-                </div>
+                  </Button>
+                </DialogFooter>
               </form>
             )}
-          </div>
-        </div>
-      )}
+          </DialogContent>
+        </Dialog>
+      </div>
     </div>
   );
 };
+
+// Icons
+const PlusIcon = ({ className }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+  </svg>
+);
+
+const FilterIcon = ({ className }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+  </svg>
+);
+
+const XIcon = ({ className }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+  </svg>
+);
+
+const FileTextIcon = ({ className }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+  </svg>
+);
+
+const EyeIcon = ({ className }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+  </svg>
+);
+
+const AlertCircleIcon = ({ className }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+  </svg>
+);
+
+const LoadingSpinner = ({ className }: { className?: string }) => (
+  <svg className={`animate-spin ${className}`} fill="none" viewBox="0 0 24 24">
+    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+  </svg>
+);
 
 export default Posts;

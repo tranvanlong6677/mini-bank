@@ -43,40 +43,75 @@ public class WebSocketSecurityConfig implements WebSocketMessageBrokerConfigurer
                     message, StompHeaderAccessor.class
                 );
 
-                if (accessor != null && StompCommand.CONNECT.equals(accessor.getCommand())) {
-                    // Lấy JWT token từ header
-                    String authHeader = accessor.getFirstNativeHeader("Authorization");
+                if (accessor != null) {
+                    StompCommand command = accessor.getCommand();
+                    log.info("STOMP Command: {}, SessionId: {}", command, accessor.getSessionId());
                     
-                    if (authHeader != null && authHeader.startsWith("Bearer ")) {
-                        String token = authHeader.substring(7);
+                    if (StompCommand.CONNECT.equals(command)) {
+                        // Lấy JWT token từ header
+                        String authHeader = accessor.getFirstNativeHeader("Authorization");
                         
-                        try {
-                            // Validate token và lấy username
-                            String username = jwtService.extractUsername(token);
+                        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                            String token = authHeader.substring(7);
                             
-                            if (username != null && jwtService.isTokenValid(token, username)) {
-                                // Tạo authentication
-                                UsernamePasswordAuthenticationToken authentication = 
-                                    new UsernamePasswordAuthenticationToken(
-                                        username,
-                                        null,
-                                        List.of(new SimpleGrantedAuthority("ROLE_USER"))
-                                    );
+                            try {
+                                // Validate token và lấy username
+                                String username = jwtService.extractUsername(token);
+                                
+                                if (username != null && jwtService.isTokenValid(token, username)) {
+                                    // Tạo authentication
+                                    UsernamePasswordAuthenticationToken authentication = 
+                                        new UsernamePasswordAuthenticationToken(
+                                            username,
+                                            null,
+                                            List.of(new SimpleGrantedAuthority("ROLE_USER"))
+                                        );
 
-                                // Set vào security context
-                                SecurityContextHolder.getContext().setAuthentication(authentication);
-                                
-                                // Set user cho WebSocket session
-                                accessor.setUser(authentication);
-                                
-                                log.info("WebSocket authenticated for user: {}", username);
+                                    // Set vào security context
+                                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                                    
+                                    // Set user cho WebSocket session
+                                    accessor.setUser(authentication);
+                                    
+                                    log.info("✅ WebSocket CONNECTED - User: {}, SessionId: {}", 
+                                        username, accessor.getSessionId());
+                                }
+                            } catch (Exception e) {
+                                log.error("WebSocket authentication failed: {}", e.getMessage());
                             }
-                        } catch (Exception e) {
-                            log.error("WebSocket authentication failed: {}", e.getMessage());
+                        } else {
+                            log.warn("No Authorization header in WebSocket CONNECT");
                         }
-                    } else {
-                        log.warn("No Authorization header in WebSocket CONNECT");
+                    } else if (StompCommand.SUBSCRIBE.equals(command)) {
+                        log.info("📥 SUBSCRIBE - User: {}, Destination: {}", 
+                            accessor.getUser() != null ? accessor.getUser().getName() : "null",
+                            accessor.getDestination());
+                    } else if (StompCommand.SEND.equals(command)) {
+                        log.info("📤 SEND - User: {}, Destination: {}", 
+                            accessor.getUser() != null ? accessor.getUser().getName() : "null",
+                            accessor.getDestination());
                     }
+                }
+                
+                return message;
+            }
+        });
+    }
+    
+    @Override
+    public void configureClientOutboundChannel(ChannelRegistration registration) {
+        registration.interceptors(new ChannelInterceptor() {
+            @Override
+            public Message<?> preSend(Message<?> message, MessageChannel channel) {
+                StompHeaderAccessor accessor = MessageHeaderAccessor.getAccessor(
+                    message, StompHeaderAccessor.class
+                );
+                
+                if (accessor != null) {
+                    log.info("📨 OUTBOUND - Command: {}, Destination: {}, SessionId: {}", 
+                        accessor.getCommand(),
+                        accessor.getDestination(),
+                        accessor.getSessionId());
                 }
                 
                 return message;
