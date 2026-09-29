@@ -10,6 +10,7 @@ import Register from './pages/Register';
 import UserManagement from './pages/UserManagement';
 import Posts from './pages/Posts';
 import ChatPage from './pages/ChatPage';
+import TodoPage from './pages/TodoPage';
 
 // Create a client
 const queryClient = new QueryClient({
@@ -54,6 +55,14 @@ function App() {
                 element={
                   <ProtectedRoute>
                     <ChatPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/todos"
+                element={
+                  <ProtectedRoute>
+                    <TodoPage />
                   </ProtectedRoute>
                 }
               />

@@ -62,7 +62,11 @@ export interface AuthUser {
 export interface AuthContextType {
   user: AuthUser | null;
   login: (username: string, password: string) => Promise<ApiResponse<AuthResponse>>;
-  register: (username: string, password: string, fullName: string) => Promise<ApiResponse<AuthResponse>>;
+  register: (
+    username: string,
+    password: string,
+    fullName: string
+  ) => Promise<ApiResponse<AuthResponse>>;
   logout: () => Promise<void>;
   logoutAll: () => Promise<void>;
   isAuthenticated: boolean;
@@ -82,7 +86,6 @@ export interface PostRequest {
   title: string;
   body: string;
 }
-
 
 // ==================== Chat Types ====================
 
@@ -106,4 +109,53 @@ export interface Conversation {
   lastMessage: string;
   lastMessageAt: string;
   unreadCount: number;
+}
+
+// ==================== Todo Types ====================
+
+export type Priority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+
+export interface Todo {
+  id: number;
+  userId: number;
+  title: string;
+  description?: string;
+  dueDate: string; // ISO date string: "2024-01-15"
+  completed: boolean;
+  priority: Priority;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TodoRequest {
+  title: string;
+  description?: string;
+  dueDate: string;
+  priority?: Priority;
+}
+
+export interface TodosByDate {
+  date: string;
+  dayOfWeek: string;
+  totalCount: number;
+  completedCount: number;
+  pendingCount: number;
+  todos: Todo[];
+}
+
+// ==================== Todo Template Types ====================
+
+export interface TodoTemplate {
+  id: number;
+  title: string;
+  icon?: string;
+  priority: Priority;
+  sortOrder: number;
+}
+
+export interface TodoTemplateRequest {
+  title: string;
+  icon?: string;
+  priority?: Priority;
+  sortOrder?: number;
 }
